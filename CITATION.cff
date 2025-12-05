@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "Please cite the following model code as follows:"
+authors:
+- family-names: "Greenheck"
+  given-names: "Elizabeth M."
+  orcid: "https://orcid.org/0009-0003-8197-1772"
+- family-names: "Michel"
+  given-names: "Cyril J."
+  orcid: "https://orcid.org/0000-0002-1198-3837"
+- family-names: "Lehman"
+  given-names: "Brendan M."
+  orcid: "https://orcid.org/0000-0002-6206-6932"
+- family-names: "Takata"
+  given-names: "Lance"
+- family-names: "Demetras"
+  given-names: "Nicholas J."
+- family-names: "Nelson"
+  given-names: "T. Reid"
+  orcid: "https://orcid.org/0000-0002-7960-2084"
+title: "Steelhead-PDAT-2024-2025"
+version: 1.0.0
+doi: 10.5281/zenodo.1234
+date-released: 2025-12-05
+url: "https://github.com/elizabethgreenheck/Steelhead-PDAT-2024-2025"
