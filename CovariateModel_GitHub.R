@@ -14,15 +14,19 @@
 ##^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #Script information
 
-#covariates_i_pt_ignorefinalstate_log
-#The data needed for this script is available on Dryad (four files: 'Obs_matrix_all_new_20250711.csv','temp_it.csv','turb_it.csv','discharge_it.csv')
-#This script indexes a non-staggered observation matrix (all fish enter at time=1; Non)
-#The data is censored once a fish emigrates (fish become a "0" once they pass gate 17; C)
+#The data needed for this script is available on GitHub (four files: 'Obs_matrix_all_new_20250711.csv','temp_it.csv','turb_it.csv','discharge_it.csv')
+#This script indexes a non-staggered observation matrix (all fish enter at time=1)
+#The data is censored once a fish emigrates (fish become a "0" once they pass gate 17)
 #This uses 8 days condensed and models values for each day (8t/8p; real days 1-8 are modeled + days 9-52 as one informative "final state")
 #The data includes release (release (p1), state at end of each day (p2-p9), final state (p10))
 #There are 3 observation states and 3 model states (3o, 3s)
 #detection probability is modeled for each period (t)
 #three candidate covariates are modeled to estimate component mortality -  but the covariates are not used to model the final state
+
+#Rather than creating six different scripts for each candidate model, the candidate models are toggled below (Lines 203-216).
+#Each jagsfile is saved for each candidate model to create FigureS5 (whisker plot)
+#The user needs only to updated the monitored parameters, and the prediction calculations (Lines 254-259) are reserved only for the best fit model.
+#The code below calculates the best fit models - the plotting code only plots significant relationships from the best fit model.
 
 ##^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 # ------------------------------------------------- # Parameters
@@ -39,23 +43,13 @@
 # a1: slope for predation mortality
 # b0: intercept for unknown mortality
 # b1: slope for unknown mortality
+# a2/a3/b2/b3: slopes for additive and interactive model effects (as needed)
 # error: residual error
-
 # ------------------------------------------------- # Calculated values:
-# Pr_timeD: discrete group-level 8-day predation mortality estimate
-# Pr_D: discrete group-level overall predation mortality estimate
-# Pr_alltimeD: mean discrete 8-day predation mortality estimates
-# Pr_allD: mean discrete overall predation mortality estimates
-# M_timeD: discrete group-level 8-day unknown mortality estimate
-# M_D: discrete group-level overall unknown mortality estimate
-# M_alltimeD: mean discrete 8-day unknown mortality estimates
-# M_allD: mean discrete overall predation unknown estimates
-# S_timeD: discrete group-level 8-day survival estimate
-# S_D: discrete group-level overall survival estimate
-# S_alltimeD: mean discrete 8-day survival estimates
-# S_allD: mean discrete overall survival estimates
-# p.all: calculated overall detection probability for all groups
-
+# Pr.length.pred: Predicted predation mortality using slope for length effects
+# Pr.disch.pred: Predicted predation mortality using slope for discharge effects
+# M.length.pred: Predicted unknown mortality using slope for length effects
+# M.disch.pred: Predicted unknown mortality using slope for discharge effects
 # ------------------------------------------------- # States (S):
 # 1 = alive
 # 2 = predated (PDAT triggered)
@@ -73,11 +67,10 @@ rm(list = ls())
 setwd("yourwd")
 
 ###Install/Load needed packages
-packs <- c('coda','R2OpenBUGS','rjags','gdata','devtools','jagsUI', 'dplyr','ggplot2','tidyr')
-install.packages(packs)
-devtools::install_github("bstaton1/postpack", force = TRUE) ##great package by Ben Staton for MCMC objects
 packs <- c('purrr','coda','R2OpenBUGS','rjags','gdata','devtools','ggh4x',
            'jagsUI', 'postpack','dplyr','ggplot2','tidyr','tidyverse','bayesplot','MCMCvis')
+#install.packages(packs)
+devtools::install_github("bstaton1/postpack", force = TRUE) ##great package by Ben Staton for MCMC objects
 lapply(packs, library, character.only = TRUE)
 
 ##^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -211,22 +204,22 @@ mod = function() {
   # Each candidate model is toggled on/off; this code just selects the best model (Model 5)
   for (i in 1:nFish){  
     for (t in 1:(Periods-2)){
-      #log(Pr[i,t]) <- a0 + a1*length[i] + error[i] #Model 1
-      #log(M[i,t]) <- b0 + b1*length[i] + error[i] #Model 1
-      #log(Pr[i,t]) <- a0 + a1*temp[i] + error[i] #Model 2
-      #log(M[i,t]) <- b0 + b1*temp[i] + error[i] #Model 2
-      #log(Pr[i,t]) <- a0 + a1*disch[i] + error[i] #Model 3
-      #log(M[i,t]) <- b0 + b1*disch[i] + error[i] #Model 3
-      #log(Pr[i,t]) <- a0 + a1*turb[i] + error[i] #Model 4
-      #log(M[i,t]) <- b0 + b1*turb[i] + error[i] #Model 4
-      log(Pr[i,t]) <- a0 + a1*length[i] + a2*disch[i] + error[i] #Model 5
-      log(M[i,t]) <- b0 + b1*length[i] + error[i] #Model 5  
-      #log(Pr[i,t]) <- a0 + a1*length[i] + a2*disch[i] + a3*length[i]*disch[i] + error[i] #Model 6
-      #log(M[i,t]) <- b0 + b1*length[i] + error[i] #Model 6 
+      #log(Pr[i,t]) <- a0 + a1*length[i] #Model 1
+      #log(M[i,t]) <- b0 + b1*length[i] #Model 1
+      #log(Pr[i,t]) <- a0 + a1*temp[i] #Model 2
+      #log(M[i,t]) <- b0 + b1*temp[i] #Model 2
+      #log(Pr[i,t]) <- a0 + a1*disch[i] #Model 3
+      #log(M[i,t]) <- b0 + b1*disch[i] #Model 3
+      #log(Pr[i,t]) <- a0 + a1*turb[i] #Model 4
+      #log(M[i,t]) <- b0 + b1*turb[i] #Model 4
+      log(Pr[i,t]) <- a0 + a1*length[i] + a2*disch[i]  #Model 5
+      log(M[i,t]) <- b0 + b1*length[i] #Model 5 
+      #log(Pr[i,t]) <- a0 + a1*length[i] + a2*disch[i] + a3*length[i]*disch[i] #Model 6
+      #log(M[i,t]) <- b0 + b1*length[i] #Model 5 
+      
       Z[i,t] <- Pr[i,t] + M[i,t]
       S[i,t] <- exp(-Z[i,t])
     } #t
-    error[i] ~ dunif(0,tau) #uninformative prior for residual error
   }# i
   
   ##priors/constraints for last period that encompasses day 9 until last detection
@@ -240,21 +233,16 @@ mod = function() {
   }# i
   
   #Priors for the linear models; all are uninformative and all can be listed even if not included
-  b0 ~ dunif(-30,0)
-  b1 ~ dnorm(0,0.01)
-  b2 ~ dnorm(0,0.01) 
-  b3 ~ dnorm(0,0.01) 
-  
-  a0 ~ dunif(-30,0)
+  a0 ~ dunif(-20,2)
   a1 ~ dnorm(0,0.01) 
   a2 ~ dnorm(0,0.01)
   a3 ~ dnorm(0,0.01)
   
-  ##Priors for error[i] - all uninformative
-  sigma ~ dunif(0,10)
-  tau <- pow(sigma,-2)
-  sigma2 <- pow(sigma,2)
-  
+  b0 ~ dunif(-20,2)
+  b1 ~ dnorm(0,0.01)
+  b2 ~ dnorm(0,0.01) 
+  b3 ~ dnorm(0,0.01) 
+
   #Generating predictive estimates using our model intercepts (a0/b0) and slopes (a1/b1)
   #For model 5 - Pr was predicted by length & discharge so we predict length holding discharge at its mean (mean = 0 because it's scaled)
   #And then we predict discharge at the mean length (again, mean = 0)
@@ -263,11 +251,8 @@ mod = function() {
   #When testing what model is best, omit this portion (only calculate for best model)
   for(j in 1:length(lengthpredict)){
     log(Pr.length.pred[j]) <- a0 + a1*lengthpredict[j] + a2*meandisch
-    Pr.length.pred.D[j] <- exp(Pr.length.pred[j])
     log(Pr.disch.pred[j]) <- a0 + a1*meanlength + a2*dischpredict[j]
-    Pr.disch.pred.D[j] <- exp(Pr.disch.pred[j])
     log(M.length.pred[j]) <- b0 + b1*lengthpredict[j]
-    M.length.pred.D[j] <- exp(M.length.pred[j])
   } #j
   
   #detection probability 
@@ -383,36 +368,35 @@ ms.init.z <- function(y, f) {
 jags.inits <- function(){list(z=ms.init.z(y,f))}
 
 ##parameters to monitor during model run 
-params <-c('a1','a2','b1',
-           'Pr.length.pred','Pr.length.pred.D',
-           'Pr.disch.pred','Pr.disch.pred.D',
-           'M.length.pred','M.length.pred.D')
+params <-c('a0','b0','a1','b1','a2','b2','a3','b3',
+           'Pr.length.pred',
+           'Pr.disch.pred',
+           'M.length.pred')
 
 ##run model in JAGS
 
 #Plot using autojags
 set.seed(121)
 jagsfit <- autojags(data=jags.data, inits=jags.inits, parameters.to.save=params, model.file,
-                    n.chains=3, n.adapt=NULL, iter.increment=3000, n.burnin=10000, n.thin=1,
-                    save.all.iter=FALSE, modules=c('glm'), parallel=TRUE, n.cores = 4,
+                    n.chains=3, n.adapt=NULL, iter.increment=3000, n.burnin=100000, n.thin=1,
+                    save.all.iter=FALSE, modules=c('glm'), parallel=TRUE,
                     DIC=TRUE, store.data=FALSE, codaOnly=FALSE,
-                    bugs.format=FALSE, Rhat.limit=1.01, max.iter=250000, verbose=TRUE)
+                    bugs.format=FALSE, Rhat.limit=1.01, max.iter=500000, verbose=TRUE)
 
 jagsfit
 
 #Each model iteration is saved as a .rds so they can be pulled for analyses later 
-#saveRDS(jagsfit,"8t_8p_3o_3s_length_i_pt_scaled_nofinalstate_log.rds") #Model 1
-#saveRDS(jagsfit,"8t_8p_3o_3s_temp_i_pt_scaled_nofinalstate_log.rds") #Model 2
-#saveRDS(jagsfit,"8t_8p_3o_3s_disch_i_pt_scaled_nofinalstate_log.rds") #Model 3
-#saveRDS(jagsfit,"8t_8p_3o_3s_turb_i_pt_scaled_nofinalstate_log.rds") #Model 4
-#saveRDS(jagsfit,"8t_8p_3o_3s_Aplength,disch_Mlength_i_pt_scaled_nofinalstate_log.rds") #Model 5
-#saveRDS(jagsfit,"8t_8p_3o_3s_Aplength:disch_Mlength_i_pt_scaled_nofinalstate_log.rds") #Model 6
-#saveRDS(jagsfit,"8t_8p_3o_3s_Aplength,disch_Mlength_i_pt_scaled_nofinalstate_log_predicted.rds") #Model 5 - with predictions
-
-#jagsfit <- readRDS("8t_8p_3o_3s_Aplength,disch_Mlength_i_pt_scaled_nofinalstate_log_predicted.rds")
+#saveRDS(jagsfit,"8t_8p_3o_3s_length_log_noerror.rds") #Model 1
+#saveRDS(jagsfit,"8t_8p_3o_3s_temp_log_noerror.rds") #Model 2
+#saveRDS(jagsfit,"8t_8p_3o_3s_disch_log_noerror.rds") #Model 3
+#saveRDS(jagsfit,"8t_8p_3o_3s_turb_log_noerror.rds") #Model 4
+#saveRDS(jagsfit,"8t_8p_3o_3s_Prlength,disch_Mlength_log_noerror.rds") #Model 5
+#saveRDS(jagsfit,"8t_8p_3o_3s_Prlength:disch_Mlength_log_noerror.rds") #Model 6
+saveRDS(jagsfit,"8t_8p_3o_3s_Prlength,disch_Mlength_log_predicted_noerror.rds") #Model 5 - with predictions
 
 ##^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-#Figure plotting
+#Figure plotting - if starting here you'll need to read in the environmental data too
+jagsfit <- readRDS("8t_8p_3o_3s_Prlength,disch_Mlength_log_predicted_noerror.rds")
 
 #Extracting model predictions
 predict_extract <- function(jagsfit){
@@ -434,7 +418,7 @@ predict_extract <- function(jagsfit){
   do.call(rbind, param_list)
 }
 
-predict <- predict_extract(jagsfit)
+predict <- predict_extract(jagsfit) 
 predict <- predict %>%
   filter(!grepl(".D",param))
 
@@ -444,7 +428,7 @@ predictvalues <- rbind(lengthpredict_c,dischpredict_c,lengthpredict_c)
 predictvalues <- cbind(param,predictvalues)
 predict <- cbind(predict,predictvalues)
 
-predict <- predict[,c(1:8,10:14)]
+predict <- predict[,c(1:9,10:14)]
 
 #Some data tidying to get things in the proper format for plotting
 predict_ <- predict %>%
@@ -471,43 +455,45 @@ disch_labels = round((disch_breaks*unique(disch_$scale_param)) + unique(disch_$c
 #Plotting Figure 4
 jagsplot_covariates <- predict_ %>%
   filter(param %in% c("M","Pr")) %>%
-  mutate(Var = factor(Var, levels = c("'Fork Length (mm)'", "Discharge~(m^3~s^{-1})"))) %>%
+  mutate(Var = factor(Var, levels = c("'Fork Length (mm)'", "Discharge~(m^3~s^{-1})")),
+         param = factor(param,levels=c("Pr","M"))) %>%
   ggplot(aes(x=pred.var))+
   geom_ribbon(aes(ymin = q2.5, ymax = q97.5, fill = param),
-              alpha = 0.2,
+            alpha = 0.2,
               linetype = 0)+
   geom_line(aes(y=q50,color=param))+
   guides(fill =  guide_legend(position = "inside"),
          col =    guide_legend(position = "inside"))+
   scale_color_manual(name="Parameter",values=c("#785EF0","#FD005D"),
-                     labels=c(bquote('Fish predation (' * italic(Pr) * ')'),
-                              bquote('Unknown mortality (' * italic(M) * ')')))+
+                     labels=c(bquote('Fish predation (' * italic(Pr)^I * ')'),
+                              bquote('Unknown mortality (' * italic(M)^I * ')')))+
   scale_fill_manual(name="Parameter",values=c("#785EF0","#FD005D"),
-                    labels=c(bquote('Fish predation (' * italic(Pr) * ')'),
-                             bquote('Unknown mortality (' * italic(M) * ')')))+
+                    labels=c(bquote('Fish predation (' * italic(Pr)^I * ')'),
+                             bquote('Unknown mortality (' * italic(M)^I * ')')))+
   xlab(element_blank())+
   ylab("Estimates (95% CrI)")+
-  facet_wrap(~Var,scales="free_x",strip.position = "bottom",labeller = label_parsed)+
+  facet_wrap(~Var,scales="free",strip.position = "bottom",labeller = label_parsed)+
   facetted_pos_scales(
     x = list(
       Var == "Discharge~(m^3~s^{-1})" ~ scale_x_continuous(breaks = disch_breaks, labels = disch_labels,expand=c(0.01,0.01)),
       Var == "'Fork Length (mm)'" ~ scale_x_continuous(breaks = length_breaks, labels = length_labels,expand=c(0.01,0.01))
     )
   )+
-  scale_y_continuous(expand=c(0.001,0.001),limits=c(0,0.3))+
+  scale_y_continuous(expand=c(0,0))+
   theme_linedraw()+
-  theme(text=element_text(size=18,color="black"),legend.position.inside = c(0.88,0.9),
+  theme(text=element_text(size=18,color="black"),legend.position.inside = c(0.85,0.9),
         strip.background = element_rect(color="white",fill="white"),strip.text = element_text(color="black"),
-        strip.placement = "outside")
+        strip.placement = "outside",panel.grid.minor = element_blank())
 jagsplot_covariates
+ggsave("Figure4.png",height=9,width=12,unit="in",dpi=600)
 
 #Table 5 (slopes) & Figure S5 (Whisker plot)
 #These require that all candidate models are read in (the saved .rds files)
-setwd("~/Desktop/Dissertation/Chapter3_Steelhead_PDAT/WriteCSVFiles/")
+setwd("yourwd")
 file_paths <- list.files(pattern = "\\.rds$", full.names = TRUE)
-file_paths <- file_paths[grepl("nofinalstate", file_paths)]
-file_paths <- file_paths[!grepl("pred", file_paths)]
 file_paths <- file_paths[grepl("log", file_paths)]
+file_paths <- file_paths[!grepl("pred", file_paths)]
+
 #I just want my best model slopes + temp on its own + the interaction on its own
 # Extract file names without extensions
 file_names <- tools::file_path_sans_ext(basename(file_paths))
@@ -548,7 +534,7 @@ whiskers <- do.call("rbind",whiskers)
 whiskers <- rownames_to_column(whiskers)
 
 #getting rid of this long naming string 
-patterns <- c("8t_8p_3o_3s","_i_pt_scaled_nofinalstate_log")
+patterns <- c("8t_8p_3o_3s","_log_noerror")
 pattern_regex <- paste(patterns, collapse = "|")
 
 # Remove all patterns in one mutate
@@ -557,12 +543,24 @@ whiskers <- whiskers %>%
     rowname_clean = str_replace_all(rowname, pattern_regex, ""),
   ) 
 
+#I accidentally monitored "a2" & "a3" for non-additive single effects models- removing those
+whiskers <- whiskers %>%
+  mutate(remove = case_when(grepl("_disch.",rowname_clean) & grepl("2|3",param) ~ "y",
+                            grepl("_temp.",rowname_clean) & grepl("2|3",param) ~ "y",
+                            grepl("_length.",rowname_clean) & grepl("2|3",param) ~ "y",
+                            grepl("_turb.",rowname_clean) & grepl("2|3",param) ~ "y",
+                            grepl(",",rowname_clean) & grepl("3",param) ~ "y",
+                            TRUE ~ "n")) %>%
+  filter(remove == "n") %>%
+  select(!remove)
+                          
 #unscale the link-scale slopes (first)
 #Then transform them to the log-scale. 
 #It's a little convoluted
 Table5 <- whiskers %>%
   dplyr::select(!c(rowname,mean,sd,q25,q75)) %>%
-  mutate(col= case_when(grepl("1",param) ~ "b1",
+  mutate(col= case_when(grepl("0",param) ~ "b0",
+                        grepl("1",param) ~ "b1",
                         grepl("2",param) ~ "b2",
                         grepl("3",param) ~ "b3"),
          Model = case_when(grepl("_disch.",rowname_clean) ~ "D",
@@ -571,10 +569,10 @@ Table5 <- whiskers %>%
                            grepl("_length.",rowname_clean) ~ "FL",
                            grepl("_temp.",rowname_clean) ~ "T",
                            grepl("_turb.",rowname_clean) ~ "N",
-                           grepl("Aplength,disch",rowname_clean) & grepl("a",param) ~ "Pr FL + D",
-                           grepl("Aplength,disch",rowname_clean) & grepl("b",param) ~ "M FL",
-                           grepl("Aplength:disch",rowname_clean) & grepl("a",param) ~ "Pr FL * D",
-                           grepl("Aplength:disch",rowname_clean) & grepl("b",param) ~ "M FL",
+                           grepl("Prlength,disch",rowname_clean) & grepl("a",param) ~ "Pr FL + D",
+                           grepl("Prlength,disch",rowname_clean) & grepl("b",param) ~ "M FL",
+                           grepl("Prlength:disch",rowname_clean) & grepl("a",param) ~ "Pr FL * D",
+                           grepl("Prlength:disch",rowname_clean) & grepl("b",param) ~ "M FL",
          )) %>%
   mutate(Model = case_when(grepl("P|M",Model) ~ Model,
                            grepl("a",param) ~ paste0("Pr ",Model),
@@ -590,16 +588,18 @@ Table5 <- whiskers %>%
                                  grepl("D",Model) & grepl("1",col) ~ unique(dischpredict_c$scale_param),
          )) %>%
   arrange(Model) %>%
-  mutate(q2.5_unscaled = round(q2.5/scale_param,digits=2),
-         q50_unscaled = round(q50/scale_param,digits=2),
-         q97.5_unscaled = round(q97.5/scale_param,digits=2)) %>%
-  mutate(q2.5_raw = round(exp(q2.5_unscaled),digits=2),
-         q50_raw = round(exp(q50_unscaled),digits=2),
-         q97.5_raw = round(exp(q97.5_unscaled),digits=2)) %>%
-  mutate(link_scaled = paste0(round(q50,digits=2)," (",round(q2.5,digits=2)," - ",round(q97.5,digits=2),")"),
-         link = paste0(q50_unscaled," (",q2.5_unscaled," - ",q97.5_unscaled,")"),
-         response = paste0(q50_raw," (",q2.5_raw," - ",q97.5_raw,")")) %>%
+  mutate(q2.5_unscaled = round(q2.5/scale_param),
+         q50_unscaled = round(q50/scale_param),
+         q97.5_unscaled = round(q97.5/scale_param)) %>%
+  mutate(q2.5_raw = round(exp(q2.5_unscaled)),
+         q50_raw = round(exp(q50_unscaled)),
+         q97.5_raw = round(exp(q97.5_unscaled))) %>%
+  mutate(link_scaled = paste0( sprintf("%.3f", q50), " [",sprintf("%.3f", q2.5), " - ",sprintf("%.3f", q97.5), "]"),
+         link = paste0( sprintf("%.3f", q50_unscaled), " [",sprintf("%.3f", q2.5_unscaled), " - ",sprintf("%.3f", q97.5_unscaled), "]"),
+         response = paste0( sprintf("%.3f", q50_raw), " [",sprintf("%.3f", q2.5_raw), " - ",sprintf("%.3f", q97.5_raw), "]")) %>%
   dplyr::select(!c(q2.5,q2.5_unscaled,q2.5_raw,q50,q50_unscaled,q50_raw,q97.5,q97.5_unscaled,q97.5_raw))
+Table5$response[Table5$response == "NA [NA - NA]"] <- NA
+Table5$link[Table5$link == "NA [NA - NA]"] <- NA
 
 #Cleaning up the rownames
 Table5$rowname_clean <- str_replace_all(Table5$rowname_clean, "\\..*", "")
@@ -614,13 +614,39 @@ Table5_ <- Table5 %>%
   pivot_wider(
     names_from = col,
     values_from = value
-  ) 
+  ) %>%
+  select(!b0) %>%
+  mutate(BestMod = case_when(grepl("M",Model) & b1 == FALSE & is.na(b2) ~ 1,
+                             grepl("Pr",Model) & b1 == FALSE & b2 == FALSE & is.na(b3) ~ 1)) %>%
+  group_by(Model, rowname_clean) %>%
+  fill(BestMod,.direction="downup") %>%
+  mutate(BestMod = cumsum(BestMod))
+
+Table5_$BestMod[is.na(Table5_$BestMod)] <- 0
+
+Table5_ <- Table5_ %>%
+  group_by(BestMod,Model,rowname_clean) %>%
+  slice_head() %>%
+  filter(type != "overlap0") %>%
+  mutate(remove = case_when(rowname_clean == "_Prlength,disch_Mlength" & Model == "M FL" ~ 1,
+                            rowname_clean == "_Prlength:disch_Mlength" & Model == "M FL" ~ 1,
+                            TRUE ~ 0
+                            )) %>%
+  filter(remove == 0) %>%
+  ungroup() %>%
+  select(!c(remove,BestMod,rowname_clean)) %>%
+  mutate(Model = factor(Model,levels=c("Pr T","Pr N","Pr D","Pr FL","Pr FL + D","Pr FL * D",
+                                       "M T","M N","M D","M FL"))) %>%
+  arrange(Model) 
+  
+Table5_ %>% write_csv("Table5.csv")
 #Table 5 doesn't print exactly as it's written, some decisions had to be made with what to report
 
 #Creating the whisker plot of all models (Figure S5)
 whiskers <- whiskers %>%
+  filter(param != "b0", param != "a0") %>%
   mutate(keep = case_when(grepl(",",rowname_clean) ~ "y",
-                          grepl("length:disch",rowname_clean) & grepl("3",param) ~ "y",
+                          grepl("length:disch",rowname_clean) & grepl("a3",param) ~ "y",
                           grepl("temp",rowname_clean) ~ "y",
                           grepl("turb",rowname_clean) ~ "y",
                           TRUE ~ "n"))
@@ -635,33 +661,37 @@ whiskers_ <- whiskers %>%
          Parameter = case_when(grepl("a",param) ~ "Pr",
                                grepl("b",param) ~ "M")) %>%
   dplyr::select(!c(rowname,rowname_clean)) %>%
-  mutate(order = case_when(Var == "Fork Length (mm)" ~ 1,
-                           Var == "Temperature (°C)" ~ 3,
-                           Var == "Discharge (m3s)" ~ 5,
-                           Var == "Turbidity (NTU)" ~ 7,
-                           Var == "ForkLength:Discharge" ~ 9)) %>%
+  mutate(order = case_when(Var == "Fork Length (mm)" ~ 3,
+                           Var == "Temperature (°C)" ~ 1,
+                           Var == "Discharge (m3s)" ~ 4,
+                           Var == "Turbidity (NTU)" ~ 2,
+                           Var == "ForkLength:Discharge" ~ 5)) %>%
   mutate(order = case_when(grepl("a",param) ~ order,
-                           TRUE ~ order+1))%>%
+                           TRUE ~ order+5))%>%
   mutate( 
     xlab = case_when(
-      Var == "Fork Length (mm)" & Parameter == "M"  ~ 'Fork*Length~"(mm)"~"."~italic(M)',
-      Var == "Fork Length (mm)" & Parameter == "Pr" ~ 'Fork*Length~"(mm)"~"."~italic(Pr)',
-      Var == "ForkLength:Discharge" & Parameter == "M"  ~ 'ForkLength*":"*Discharge~"."~italic(M)',
-      Var == "ForkLength:Discharge" & Parameter == "Pr" ~ 'ForkLength*":"*Discharge~"."~italic(Pr)',
-      Var == "Temperature (°C)" & Parameter == "M"  ~ 'Temperature~"(°C)"~"."~italic(M)',
-      Var == "Temperature (°C)" & Parameter == "Pr" ~ 'Temperature~"(°C)"~"."~italic(Pr)',
-      Var == "Turbidity (NTU)" & Parameter == "M"  ~ 'Turbidity~"(NTU)"~"."~italic(M)',
-      Var == "Turbidity (NTU)" & Parameter == "Pr" ~ 'Turbidity~"(NTU)"~"."~italic(Pr)',
-      Var == "Discharge (m3s)" & Parameter == "M"  ~ 'Discharge~(m^3*s^{-1})~"."~italic(M)',
-      Var == "Discharge (m3s)" & Parameter == "Pr" ~ 'Discharge~(m^3*s^{-1})~"."~italic(Pr)',
+      Var == "Fork Length (mm)" & Parameter == "M"  ~ 'Fork*Length~"(mm)"~"-"~italic(M)^I',
+      Var == "Fork Length (mm)" & Parameter == "Pr" ~ 'Fork*Length~"(mm)"~"-"~italic(Pr)^I',
+      Var == "ForkLength:Discharge" & Parameter == "M"  ~ 'ForkLength*":"*Discharge~"-"~italic(M)^I',
+      Var == "ForkLength:Discharge" & Parameter == "Pr" ~ 'ForkLength*":"*Discharge~"-"~italic(Pr)^I',
+      Var == "Temperature (°C)" & Parameter == "M"  ~ 'Temperature~"(°C)"~"-"~italic(M)^I',
+      Var == "Temperature (°C)" & Parameter == "Pr" ~ 'Temperature~"(°C)"~"-"~italic(Pr)^I',
+      Var == "Turbidity (NTU)" & Parameter == "M"  ~ 'Turbidity~"(NTU)"~"-"~italic(M)^I',
+      Var == "Turbidity (NTU)" & Parameter == "Pr" ~ 'Turbidity~"(NTU)"~"-"~italic(Pr)^I',
+      Var == "Discharge (m3s)" & Parameter == "M"  ~ 'Discharge~(m^3*s^{-1})~"-"~italic(M)^I',
+      Var == "Discharge (m3s)" & Parameter == "Pr" ~ 'Discharge~(m^3*s^{-1})~"-"~italic(Pr)^I',
       TRUE ~ NA_character_
     )
   )%>%
-  mutate(xlab = factor(xlab, levels = unique(xlab[order(-order)]))) 
+  mutate(xlab = factor(xlab, levels = unique(xlab[order(-order)]))) %>%
+  filter(!grepl("0",param)) %>%
+  mutate(facet = case_when(order == 9 ~ "1",
+                           TRUE ~ "0"))
 
-whiskerplot <- whiskers_ %>%
+whiskerplot1 <- whiskers_ %>%
   group_by(order) %>%
   slice_head() %>%
+  filter(order != 9) %>%
   ggplot(aes(x=xlab))+
   geom_hline(aes(yintercept=0),linetype="dashed")+
   geom_errorbar(aes(ymin=q2.5,ymax=q97.5),color="black",width=0,linewidth=0.5)+
@@ -670,9 +700,49 @@ whiskerplot <- whiskers_ %>%
   scale_fill_manual(name="Significant",values=c("black","white"),
                     labels=c("Yes","No"))+
   coord_flip()+
-  xlab("Parameter")+
+  xlab(element_blank())+
+  ylab(element_blank())+
+  theme_linedraw()+
+  theme(text=element_text(size=18),legend.position = "none",
+        plot.margin = unit(c(0.5, 1.5, 0.5, 0.5), "lines"))+
+  scale_x_discrete(labels = function(x) parse(text = x))+
+  scale_y_continuous(limits=c(-1.5,1.5))
+whiskerplot1
+
+whiskerplot2 <- whiskers_ %>%
+  group_by(order) %>%
+  slice_head() %>%
+  filter(order == 9) %>%
+  ggplot(aes(x=xlab))+
+  geom_hline(aes(yintercept=0),linetype="dashed")+
+  geom_errorbar(aes(ymin=q2.5,ymax=q97.5),color="black",width=0,linewidth=0.5)+
+  geom_errorbar(aes(ymin=q25,ymax=q75),color="#333333",width=0,linewidth=2)+
+  geom_point(aes(y=q50),fill="white",color="black",pch=21,size=3)+
+  scale_fill_manual(name="Significant",values=c("black","white"),
+                    labels=c("Yes","No"))+
+  coord_flip()+
+  xlab(element_blank())+
   ylab("Estimates (95% CrI)")+
   theme_linedraw()+
-  theme(text=element_text(size=18),legend.position = "none")+
-  scale_x_discrete(labels = function(x) parse(text = x))
-whiskerplot
+  theme(text=element_text(size=18),legend.position = "none",
+        plot.margin = unit(c(0.5, 1.5, 0.5, 0.5), "lines"))+
+  scale_x_discrete(labels = function(x) parse(text = x))+
+  scale_y_continuous(limits=c(-20,20),expand=c(0,0))
+whiskerplot2
+
+library(cowplot)
+whisker_combined <- plot_grid(
+  whiskerplot1, whiskerplot2,
+  ncol = 1,
+  align = "v",
+  rel_heights = c(4, 1)
+)
+whisker_combined 
+ggsave(
+  "FigureS4.png",
+  whisker_combined,
+  width  = 12,
+  height = 9,
+  units  = "in",
+  dpi    = 300
+)

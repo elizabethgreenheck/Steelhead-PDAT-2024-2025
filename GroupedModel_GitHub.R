@@ -1,5 +1,5 @@
 ####Steelhead PDAT Mortality Project^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-##Last Updated 2025-09-17 by EMG
+##Last Updated 2025-11-24 by EMG
 
 #This code accompanies the model used in the following publication:
 
@@ -14,10 +14,10 @@
 ##^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #Script information
 
-#The data needed for this script is available on Dryad (one file: 'Obs_matrix_all_new_20250711.csv')
-#MSM_Non_C_8t_8p_3o_3s_pg_FINAL
-#This script indexes a non-staggered observation matrix (all fish enter at time=1; Non)
-#The data is censored once a fish emigrates (fish become a "0" once they pass gate 17; C)
+#The data needed for this script is available on GitHub ('Obs_matrix_all_new_20250711.csv')
+
+#This script indexes a non-staggered observation matrix (all fish enter at time=1)
+#The data is censored once a fish emigrates (fish become a "0" once they pass gate 17)
 #This uses 8 days condensed and models values for each day (8t/8p; real days 1-8 are modeled + days 9-52 as one informative "final state")
 #The data includes release (release (p1), state at end of each day (p2-p9), final state (p10))
 #There are 3 observation states and 3 model states (3o, 3s)
@@ -269,11 +269,13 @@ params <-c('Pr_timeD',"Pr_D","M_timeD","M_D","S_D","S_timeD",
            "p.g","p.all")
 
 ##run model in JAGS
+set.seed(123)
 jagsfit <- autojags(data=jags.data, inits=jags.inits, parameters.to.save=params, model.file,
                     n.chains=3, n.adapt=NULL, iter.increment=3000, n.burnin=100000, n.thin=1,
-                    save.all.iter=FALSE, modules=c('glm'), parallel=TRUE, n.cores = 4,
+                    save.all.iter=FALSE, modules=c('glm'), parallel=TRUE,
                     DIC=TRUE, store.data=FALSE, codaOnly=FALSE,
                     bugs.format=FALSE, Rhat.limit=1.01, max.iter=500000, verbose=TRUE)
+saveRDS(jagsfit,"8t_8p_3o_3s_groupedmodel.rds") 
 
 ##^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 ##Plotting and pulling model estimates
@@ -316,14 +318,15 @@ jagsfits_$RG <- factor(jagsfits_$RG, levels=c("1","2","3","all"),labels=c("March
 jagsfits_$parameter_type <- factor(jagsfits_$parameter_type, levels=c("timeD","D"),labels=c("8-day","Overall"))
 
 #Plotting model estimates (Figure 3)
-est.plt <- jagsfits_ %>%
+Figure3 <- jagsfits_ %>%
   ggplot(aes(x = parameter, fill=parameter))+
   geom_boxplot(aes(ymin = q2.5, lower = q25, middle = q50, upper = q75, ymax = q97.5),
                stat="identity")+
+  stat_summary(aes(y=q50),fun = mean, geom = "point", size = 3, color = "black") + # Add mean point
   facet_grid(cols=vars(RG),rows=vars(parameter_type))+
   scale_fill_manual(name="State",values=c("#FFB000","#785EF0","#FD005D"),
                     labels=c(
-                      bquote('Survival (' * italic(S) * ')'),
+                      bquote('Survival (' * italic(S) *')'),
                       bquote('Fish predation (' * italic(Pr) * ')'),
                       bquote('Unknown mortality (' * italic(M) * ')')
                     ))+
@@ -333,22 +336,32 @@ est.plt <- jagsfits_ %>%
   ylab('Estimates (95% CrI)')+
   xlab(element_blank())+
   scale_x_discrete(
-    labels = c(expression(italic(S)), expression(italic(Pr)), expression(italic(M)))
+    labels = c(expression(italic(S)), expression(italic(Pr)^D), expression(italic(M)^D))
   )+
-  theme(strip.background = element_rect(color="white",fill="white"),strip.text=element_text(color="black"))
-est.plt
+  theme(strip.background = element_rect(color="white",fill="white"),strip.text=element_text(color="black"),
+        legend.position="none")
+Figure3
+ggsave("Figure3.png",height=9,width=12,unit="in",dpi=600)
 
 #Creating Table 5
-jagsfit_dat_ <- round(jagsfits_[,3:7]*100,digits=1)
+jagsfit_dat_ <- jagsfits_[,1:7]
 jagsfit_dat <- cbind(jagsfits_[,8:11],jagsfit_dat_)
-jagsfit_dat <- jagsfit_dat[,c(2:5,7,9)]
-Table5 <- jagsfit_dat %>%
-  mutate(Estimate = paste0(q50," (",q2.5,"-",q97.5,")"),
-         header = paste0(parameter,".",parameter_type)) %>%
-  dplyr::select(!c(q2.5,q50,q97.5,parameter_type,parameter)) %>%
-  pivot_wider(id_cols=RG,values_from=Estimate,names_from=header) %>%
-  dplyr::select(RG,`S.8-day`,S.Overall,`Pr.8-day`,Pr.Overall,`M.8-day`,
-                M.Overall)
+jagsfit_dat <- jagsfit_dat[,c(2:5,7,9,11)]
+Table4 <- jagsfit_dat %>%
+  mutate(
+    Estimate = paste0(
+      sprintf("%.3f", mean), " [",
+      sprintf("%.3f", q2.5), " - ",
+      sprintf("%.3f", q97.5), "]"
+    ),
+    header = paste0(parameter, ".", parameter_type),
+    RG = factor(RG, levels = c("All", "March", "April", "May"))
+  ) %>%
+  dplyr::select(!c(q2.5, q50, q97.5, parameter_type, parameter)) %>%
+  pivot_wider(id_cols = RG, values_from = Estimate, names_from = header) %>%
+  dplyr::select(RG, `S.8-day`, S.Overall, `Pr.8-day`, Pr.Overall, `M.8-day`, M.Overall) %>%
+  arrange(RG)
+Table4 %>% write_csv("Table4.csv")
 
 #Pulling detection probability data from the jagsfit object
 p.g.all <- list()
@@ -382,7 +395,7 @@ p.all$RG <- factor(p.all$RG,levels=c(1,2,3,"All"),labels=c("March","April","May"
 p.all$P <- factor(p.all$P,levels=c(1:10))
 
 #Plotting detection probability (Figure S2)
-p.plt <- p.all %>%
+FigureS2 <- p.all %>%
   ggplot(aes(x = P))+
   geom_boxplot(aes(ymin = q2.5, lower = q25, middle = q50, upper = q75, ymax = q97.5),
                stat="identity",fill="grey")+
@@ -393,6 +406,5 @@ p.plt <- p.all %>%
   ylab('Estimates (95% CrI)')+
   xlab("p[t]")+
   theme(strip.background = element_rect(color="white",fill="white"),strip.text=element_text(color="black"))
-p.plt
-setwd("~/Desktop/")
-ggsave("Group_ps.png",height=9,width=12,unit="in",dpi=600)
+FigureS2
+ggsave("FigureS3.png",height=9,width=12,unit="in",dpi=600)
