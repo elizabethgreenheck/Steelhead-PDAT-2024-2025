@@ -1,6 +1,6 @@
-.R files, capture history, and environmental covariate data for the Steelhead PDAT Project (under review)
+.R files, capture history, and environmental covariate data for the Steelhead PDAT Project
 
-##Last Updated 2025-11-24 by EMG
+##Last Updated 2026-05-20 by EMG
 
 #This code accompanies the model used in the following publication:
 
@@ -8,7 +8,7 @@
 #Authors: E. M. Greenheck1, C. Michel2, B. Lehman2, L. Takata2, N. Demetras2, T. R. Nelson1
 #1 George Mason University, Department of Environmental Science and Policy
 #2 University of California Santa Cruz in affiliation with NOAA-NMFS-SWFSC
-#[in progress]
+#Canadian Journal of Fisheries and Aquatic Sciences
 
 #Kéry and Schaub 2012 (Bayesian population analysis using WinBUGS: a hierarchical perspective) was used to build these models
 
