@@ -1,5 +1,5 @@
 ####Steelhead PDAT Mortality Project^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-##Last Updated 2025-11-24 by EMG
+##Last Updated 2026-05-20 by EMG
 
 #This code accompanies the model used in the following publication:
 
@@ -7,7 +7,7 @@
 #Authors: E. M. Greenheck1, C. Michel2, B. Lehman2, L. Takata2, N. Demetras2, T. R. Nelson1
 #1 George Mason University, Department of Environmental Science and Policy
 #2 University of California Santa Cruz in affiliation with NOAA-NMFS-SWFSC
-#[in progress]
+#Canadian Journal of Fisheries and Aquatic Sciences
 
 #Kéry and Schaub 2012 (Bayesian population analysis using WinBUGS: a hierarchical perspective) was used to build these models
 
@@ -208,8 +208,8 @@ mod = function() {
     } #t
     for (t in first[i]:last[i]){
       y[i,t] ~ dcat(po[z[i,t], i, t,]) # Observation process: draw Observed (t) given State (t)
-    } #t
-  } #i
+    } # t
+  } # i
 } #model close
 
 # write model to a text file
@@ -280,6 +280,8 @@ saveRDS(jagsfit,"8t_8p_3o_3s_groupedmodel.rds")
 ##^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 ##Plotting and pulling model estimates
 #Function to extract parameter estimates
+jagsfit <- readRDS("8t_8p_3o_3s_groupedmodel.rds")
+
 jags_extract <- function(jagsfit){
   param_pattern <- "^(Pr|M|S)"
   params <- grep(param_pattern, names(jagsfit$mean), value = TRUE)
@@ -317,7 +319,7 @@ jagsfits_$parameter <- factor(jagsfits_$parameter, levels=c("S","Pr","M"),labels
 jagsfits_$RG <- factor(jagsfits_$RG, levels=c("1","2","3","all"),labels=c("March","April","May","All"))
 jagsfits_$parameter_type <- factor(jagsfits_$parameter_type, levels=c("timeD","D"),labels=c("8-day","Overall"))
 
-#Plotting model estimates (Figure 3)
+# Creating Figure 3
 Figure3 <- jagsfits_ %>%
   ggplot(aes(x = parameter, fill=parameter))+
   geom_boxplot(aes(ymin = q2.5, lower = q25, middle = q50, upper = q75, ymax = q97.5),
@@ -341,9 +343,8 @@ Figure3 <- jagsfits_ %>%
   theme(strip.background = element_rect(color="white",fill="white"),strip.text=element_text(color="black"),
         legend.position="none")
 Figure3
-ggsave("Figure3.png",height=9,width=12,unit="in",dpi=600)
 
-#Creating Table 5
+# Creating Table 4
 jagsfit_dat_ <- jagsfits_[,1:7]
 jagsfit_dat <- cbind(jagsfits_[,8:11],jagsfit_dat_)
 jagsfit_dat <- jagsfit_dat[,c(2:5,7,9,11)]
@@ -361,9 +362,8 @@ Table4 <- jagsfit_dat %>%
   pivot_wider(id_cols = RG, values_from = Estimate, names_from = header) %>%
   dplyr::select(RG, `S.8-day`, S.Overall, `Pr.8-day`, Pr.Overall, `M.8-day`, M.Overall) %>%
   arrange(RG)
-Table4 %>% write_csv("Table4.csv")
 
-#Pulling detection probability data from the jagsfit object
+# Creating Figure S3
 p.g.all <- list()
 for(i in 2:10){
   p.g <- data.frame(q2.5 = jagsfit$q2.5$p.g[,i], q25 = jagsfit$q25$p.g[,i], 
@@ -394,8 +394,7 @@ p.all <- rbind(p.1,p.all)
 p.all$RG <- factor(p.all$RG,levels=c(1,2,3,"All"),labels=c("March","April","May","All"))
 p.all$P <- factor(p.all$P,levels=c(1:10))
 
-#Plotting detection probability (Figure S2)
-FigureS2 <- p.all %>%
+FigureS3 <- p.all %>%
   ggplot(aes(x = P))+
   geom_boxplot(aes(ymin = q2.5, lower = q25, middle = q50, upper = q75, ymax = q97.5),
                stat="identity",fill="grey")+
@@ -406,5 +405,4 @@ FigureS2 <- p.all %>%
   ylab('Estimates (95% CrI)')+
   xlab("p[t]")+
   theme(strip.background = element_rect(color="white",fill="white"),strip.text=element_text(color="black"))
-FigureS2
-ggsave("FigureS3.png",height=9,width=12,unit="in",dpi=600)
+FigureS3
