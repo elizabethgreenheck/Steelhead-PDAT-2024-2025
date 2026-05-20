@@ -1,5 +1,5 @@
 ####Steelhead PDAT Mortality Project^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-##Last Updated 2025-09-17 by EMG
+##Last Updated 2026-05-20 by EMG
 
 #This code accompanies the model used in the following publication:
 
@@ -7,7 +7,7 @@
 #Authors: E. M. Greenheck1, C. Michel2, B. Lehman2, L. Takata2, N. Demetras2, T. R. Nelson1
 #1 George Mason University, Department of Environmental Science and Policy
 #2 University of California Santa Cruz in affiliation with NOAA-NMFS-SWFSC
-#[in progress]
+#Canadian Journal of Fisheries and Aquatic Sciences
 
 #Kéry and Schaub 2012 (Bayesian population analysis using WinBUGS: a hierarchical perspective) was used to build these models
 
@@ -24,7 +24,7 @@
 #three candidate covariates are modeled to estimate component mortality -  but the covariates are not used to model the final state
 
 #Rather than creating six different scripts for each candidate model, the candidate models are toggled below (Lines 203-216).
-#Each jagsfile is saved for each candidate model to create FigureS5 (whisker plot)
+#Each jagsfile is saved for each candidate model to create FigureS4 (whisker plot)
 #The user needs only to updated the monitored parameters, and the prediction calculations (Lines 254-259) are reserved only for the best fit model.
 #The code below calculates the best fit models - the plotting code only plots significant relationships from the best fit model.
 
@@ -242,7 +242,7 @@ mod = function() {
   b1 ~ dnorm(0,0.01)
   b2 ~ dnorm(0,0.01) 
   b3 ~ dnorm(0,0.01) 
-
+  
   #Generating predictive estimates using our model intercepts (a0/b0) and slopes (a1/b1)
   #For model 5 - Pr was predicted by length & discharge so we predict length holding discharge at its mean (mean = 0 because it's scaled)
   #And then we predict discharge at the mean length (again, mean = 0)
@@ -369,6 +369,7 @@ jags.inits <- function(){list(z=ms.init.z(y,f))}
 
 ##parameters to monitor during model run 
 params <-c('a0','b0','a1','b1','a2','b2','a3','b3',
+           "Pr",
            'Pr.length.pred',
            'Pr.disch.pred',
            'M.length.pred')
@@ -397,6 +398,7 @@ saveRDS(jagsfit,"8t_8p_3o_3s_Prlength,disch_Mlength_log_predicted_noerror.rds") 
 ##^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #Figure plotting - if starting here you'll need to read in the environmental data too
 jagsfit <- readRDS("8t_8p_3o_3s_Prlength,disch_Mlength_log_predicted_noerror.rds")
+jagsfit <- `8t_8p_3o_3s_Prlength,disch_Mlength_log_predicted_noerror`
 
 #Extracting model predictions
 predict_extract <- function(jagsfit){
@@ -452,7 +454,7 @@ disch_ <- predict_ %>%
 disch_breaks = c(-2:2)
 disch_labels = round((disch_breaks*unique(disch_$scale_param)) + unique(disch_$cntr_param))
 
-#Plotting Figure 4
+# Creating Figure 4
 jagsplot_covariates <- predict_ %>%
   filter(param %in% c("M","Pr")) %>%
   mutate(Var = factor(Var, levels = c("'Fork Length (mm)'", "Discharge~(m^3~s^{-1})")),
@@ -471,7 +473,7 @@ jagsplot_covariates <- predict_ %>%
                     labels=c(bquote('Fish predation (' * italic(Pr)^I * ')'),
                              bquote('Unknown mortality (' * italic(M)^I * ')')))+
   xlab(element_blank())+
-  ylab("Estimates (95% CrI)")+
+  ylab("Mortality Estimates")+
   facet_wrap(~Var,scales="free",strip.position = "bottom",labeller = label_parsed)+
   facetted_pos_scales(
     x = list(
@@ -485,9 +487,8 @@ jagsplot_covariates <- predict_ %>%
         strip.background = element_rect(color="white",fill="white"),strip.text = element_text(color="black"),
         strip.placement = "outside",panel.grid.minor = element_blank())
 jagsplot_covariates
-ggsave("Figure4.png",height=9,width=12,unit="in",dpi=600)
 
-#Table 5 (slopes) & Figure S5 (Whisker plot)
+# Creating Table 5 & Figure S4
 #These require that all candidate models are read in (the saved .rds files)
 setwd("yourwd")
 file_paths <- list.files(pattern = "\\.rds$", full.names = TRUE)
@@ -642,7 +643,7 @@ Table5_ <- Table5_ %>%
 Table5_ %>% write_csv("Table5.csv")
 #Table 5 doesn't print exactly as it's written, some decisions had to be made with what to report
 
-#Creating the whisker plot of all models (Figure S5)
+#Creating the whisker plot of all models (Figure S4)
 whiskers <- whiskers %>%
   filter(param != "b0", param != "a0") %>%
   mutate(keep = case_when(grepl(",",rowname_clean) ~ "y",
@@ -731,18 +732,19 @@ whiskerplot2 <- whiskers_ %>%
 whiskerplot2
 
 library(cowplot)
-whisker_combined <- plot_grid(
+FigureS4 <- plot_grid(
   whiskerplot1, whiskerplot2,
   ncol = 1,
   align = "v",
   rel_heights = c(4, 1)
 )
-whisker_combined 
+FigureS4 
 ggsave(
   "FigureS4.png",
-  whisker_combined,
+  FigureS4,
   width  = 12,
   height = 9,
   units  = "in",
   dpi    = 300
 )
+
